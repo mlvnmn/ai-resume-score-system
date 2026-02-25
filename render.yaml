@@ -1,0 +1,23 @@
+# render.yaml — Render Blueprint
+# Deploy as a single Web Service (Python + Node.js)
+
+services:
+  - type: web
+    name: resume-ai
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: |
+      # Install Node.js (needed for React build)
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      apt-get install -y nodejs
+      # Run the build script
+      chmod +x build.sh
+      bash build.sh
+    startCommand: cd backend && gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.11"
+      - key: NLTK_DATA
+        value: /opt/render/project/src/nltk_data
+    healthCheckPath: /api/health
