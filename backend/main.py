@@ -63,6 +63,11 @@ class AnalysisResponse(BaseModel):
     recommendations: list[str]
 
 
+class BatchAnalysisResponse(BaseModel):
+    results: list[AnalysisResponse]
+    failed: list[str]
+
+
 class RoleItem(BaseModel):
     key: str
     title: str
@@ -144,6 +149,79 @@ async def analyze_resume(
         recommendations=recommendations,
     )
 
+
+@app.post("/api/analyze-batch", response_model=BatchAnalysisResponse)
+async def analyze_batch_resumes(
+    files: list[UploadFile] = File(...),
+    role: str = Form(default="software_engineer"),
+):
+    """
+    Upload multiple resumes and receive ranked ATS analyses.
+    - files: list of PDF or DOCX resumes
+    - role:  job role key (default: software_engineer)
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided.")
+
+    # Get job description
+    job = get_job_description(role)
+    if not job:
+        raise HTTPException(status_code=400, detail=f"Unknown role: {role}")
+
+    allowed = (".pdf", ".docx", ".doc")
+    results = []
+    failed = []
+
+    for file in files:
+        if not file.filename:
+            continue
+            
+        if not file.filename.lower().endswith(allowed):
+            failed.append(f"{file.filename} (Unsupported format)")
+            continue
+
+        contents = await file.read()
+        if len(contents) > 5 * 1024 * 1024:
+            failed.append(f"{file.filename} (Exceeds 5MB limit)")
+            continue
+
+        try:
+            resume_text = parse_resume(contents, file.filename)
+            if not resume_text.strip():
+                failed.append(f"{file.filename} (Empty or image-based)")
+                continue
+
+            result = calculate_ats_score(
+                resume_text=resume_text,
+                job_description=job["description"],
+                required_skills=job["required_skills"],
+            )
+
+            recommendations = generate_recommendations(
+                missing_skills=result["missingKeywords"],
+                similarity_score=result["similarityScore"],
+                formatting_score=result["formattingScore"],
+                keyword_coverage=result["keywordCoverage"],
+                resume_text=resume_text,
+            )
+
+            results.append(AnalysisResponse(
+                fileName=file.filename,
+                atsScore=result["atsScore"],
+                skills=result["skills"],
+                missingKeywords=result["missingKeywords"],
+                recommendations=recommendations,
+            ))
+        except Exception as e:
+            failed.append(f"{file.filename} (Error: {str(e)})")
+
+    # Sort results by ATS score descending
+    results.sort(key=lambda x: x.atsScore, reverse=True)
+
+    return BatchAnalysisResponse(
+        results=results,
+        failed=failed
+    )
 
 # ─── Health check ────────────────────────────────────────────────────────────
 

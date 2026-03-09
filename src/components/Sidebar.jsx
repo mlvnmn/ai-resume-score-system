@@ -1,10 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, FileUp, Scan } from 'lucide-react';
+import { LayoutDashboard, FileUp, Scan, Users } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab }) => {
   const mainNav = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'upload', icon: FileUp, label: 'Upload Resume' },
+    { id: 'batch', icon: Users, label: 'Batch Rank' },
   ];
 
   return (
